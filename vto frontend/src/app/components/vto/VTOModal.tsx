@@ -114,6 +114,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
   const [addedToCart, setAddedToCart] = useState(false);
   const [flashActive, setFlashActive] = useState(false);
   const [captured, setCaptured] = useState(false);
+  const [loadingCountdown, setLoadingCountdown] = useState(5);
   const [vtoResultUrl, setVtoResultUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -133,8 +134,22 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
     let stream: MediaStream | null = null;
     setCameraState('loading');
 
+    // Safety timeout: if camera doesn't respond in 5s, fall back to simulated mode
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        console.warn('Camera init timed out — falling back to simulated mode');
+        setCameraState('simulated');
+      }
+    }, 6000);
+
+    // Countdown for UI feedback
+    const countdownInterval = setInterval(() => {
+      setLoadingCountdown(prev => Math.max(0, prev - 1));
+    }, 1000);
+
     const init = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
+        clearTimeout(safetyTimer);
         if (!cancelled) setCameraState('simulated');
         return;
       }
@@ -146,7 +161,8 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
             height: { ideal: 800 } 
           },
         });
-        
+
+        clearTimeout(safetyTimer);
         if (cancelled) {
           stream.getTracks().forEach(t => t.stop());
           return;
@@ -155,32 +171,32 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         if (videoRef.current) {
           const video = videoRef.current;
           video.srcObject = stream;
-          
-          // Try to play immediately if readyScale is enough
+
           const tryPlay = async () => {
             try {
               await video.play();
               if (!cancelled) setCameraState('active');
             } catch (e) {
-              console.warn("Video play failed or interrupted:", e);
+              console.warn('Video play failed:', e);
+              if (!cancelled) setCameraState('simulated');
             }
           };
 
           if (video.readyState >= 2) {
-             tryPlay();
+            tryPlay();
           } else {
-             video.oncanplay = () => {
-               if (!cancelled) tryPlay();
-             };
+            video.oncanplay = () => { if (!cancelled) tryPlay(); };
           }
         }
         streamRef.current = stream;
-      } catch (err) {
-        console.error("Camera access error:", err);
+      } catch (err: any) {
+        clearTimeout(safetyTimer);
+        console.error('Camera access error:', err);
         if (!cancelled) {
-          if (err instanceof DOMException && err.name === 'NotReadableError') {
-             // Let user know the device is locked/busy
-             showToast('🚨 Camera in use by another tab. Please close other tabs and retry.');
+          if (err?.name === 'NotReadableError') {
+            showToast('🚨 Camera in use by another app. Close other apps & retry.');
+          } else if (err?.name === 'NotAllowedError') {
+            showToast('🚫 Camera permission denied. Enable in browser settings.');
           }
           setCameraState('denied');
         }
@@ -190,9 +206,9 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
     init();
     return () => {
       cancelled = true;
-      if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-      }
+      clearTimeout(safetyTimer);
+      clearInterval(countdownInterval);
+      if (stream) stream.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -315,7 +331,19 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
             <div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
           </div>
           <h3 className="text-base font-bold text-gray-800 mb-2">Starting Virtual Try-On</h3>
-          <p className="text-sm text-gray-500">Requesting camera access...</p>
+          <p className="text-sm text-gray-500 mb-4">Requesting camera access...</p>
+          
+          <div className="mt-4 p-4 bg-gray-50 rounded-xl w-full">
+            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+              If this takes too long, please check your browser's permissions.
+            </p>
+            <button
+              onClick={() => setCameraState('simulated')}
+              className="w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold rounded-lg transition-colors"
+            >
+              Skip to Simulation ({loadingCountdown}s)
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -5,8 +5,8 @@ import './styles/index.css'
 import './styles/tailwind.css'
 import './styles/theme.css'
 
+// Note: StrictMode removed intentionally — it double-invokes effects which
+// breaks camera initialization via getUserMedia in development.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <App />
 )

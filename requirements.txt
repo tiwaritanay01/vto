@@ -7,3 +7,5 @@ axios==1.7.2
 requests==2.32.3
 numpy==1.26.4
 sharp==0.33.4
+opencv-python-headless==4.10.0.84
+mediapipe==0.10.14
