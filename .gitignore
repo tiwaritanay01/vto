@@ -1,0 +1,36 @@
+# Node.js
+**/node_modules/
+**/package-lock.json
+**/npm-debug.log*
+
+# Build artifacts
+**/dist/
+**/build/
+.vite/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+**/.env
+**/.venv
+venv/
+ENV/
+env/
+python/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Specific
+vto_project_summary.md
+vto_modal_loading_*.png
+*.webp
+*.log
