@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "postinstall": "node ./scripts/fetch-faceapi-models.cjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -62,6 +63,8 @@
     "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8",
     "vaul": "1.1.2"
+    ,
+    "face-api.js": "^0.22.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import overlayPresets from './overlayPresets.json';
 import { X, HelpCircle, ShoppingCart, RotateCcw, Layers, Share2, Check, Sparkles } from "lucide-react";
 import { type VTOType, type TrackingState, type CameraState, type VTOVariant, VTO_VARIANTS } from "./types";
 import { TrackingStatusIndicator } from "./TrackingStatusIndicator";
@@ -120,6 +121,20 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isInitializingRef = useRef(false);
+  const modelsLoadedRef = useRef(false);
+  const detectionRef = useRef<any | null>(null);
+  const productImgRef = useRef<HTMLImageElement | null>(null);
+  const faceapiRef = useRef<any | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [runtimePresets, setRuntimePresets] = useState<Record<string, { wMul: number; yOffsetMul: number; yAdjust: number }>>(() => {
+    try {
+      const raw = localStorage.getItem('vto_overlay_presets');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return overlayPresets as any;
+  });
   const trackingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cameraInitKey, setCameraInitKey] = useState(0);
   const [permissionState, setPermissionState] = useState<string | null>(null);
@@ -171,13 +186,23 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
     };
 
     const init = async () => {
+      // prevent concurrent inits
+      if (isInitializingRef.current) return;
+      isInitializingRef.current = true;
       await queryPermission();
       if (!navigator.mediaDevices?.getUserMedia) {
         clearTimeout(safetyTimer);
         if (!cancelled) setCameraState('simulated');
+        isInitializingRef.current = false;
         return;
       }
       try {
+        // If an existing stream is present, stop it before requesting a new one
+        if (streamRef.current) {
+          try { streamRef.current.getTracks().forEach(t => t.stop()); } catch {}
+          streamRef.current = null;
+          if (videoRef.current) videoRef.current.srcObject = null;
+        }
         console.debug('[VTO] requesting getUserMedia()');
         setLastError(null);
         stream = await navigator.mediaDevices.getUserMedia({
@@ -247,7 +272,9 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
           }
         }
         streamRef.current = stream;
+        isInitializingRef.current = false;
       } catch (err: any) {
+        isInitializingRef.current = false;
         clearTimeout(safetyTimer);
         console.error('Camera access error:', err);
         if (!cancelled) {
@@ -269,9 +296,142 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       cancelled = true;
       clearTimeout(safetyTimer);
       clearInterval(countdownInterval);
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      // stop both the local stream and any stream on the shared ref
+      try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch {}
+      try { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); } catch {}
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
     };
   }, [cameraInitKey]);
+
+  // Draw video -> canvas and overlay product image
+  useEffect(() => {
+    // Models are expected to be hosted locally at /models for reliability
+    const MODEL_URL = '/models';
+    let modelLoadCancelled = false;
+    (async function loadModels() {
+      try {
+        // dynamic import face-api.js to keep it out of main bundle until needed
+        const faceapi = await import('face-api.js');
+        faceapiRef.current = faceapi;
+        // load only tiny models to keep bundle small and real-time
+        await faceapiRef.current.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapiRef.current.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+        modelsLoadedRef.current = true;
+      } catch (e) {
+        console.warn('[VTO] face-api model load failed', e);
+        modelsLoadedRef.current = false;
+      }
+    })();
+
+    let detectInterval: ReturnType<typeof setInterval> | null = null;
+    const startDetection = () => {
+      const video = videoRef.current;
+      if (!video || !modelsLoadedRef.current) return;
+      // tuned TinyFaceDetector options for speed/accuracy tradeoff
+      const detectorOptions = new faceapiRef.current.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 });
+      detectInterval = setInterval(async () => {
+        if (!video || video.readyState < 2) return;
+        try {
+          const det = await faceapiRef.current
+            .detectSingleFace(video, detectorOptions)
+            .withFaceLandmarks(true);
+          detectionRef.current = det || null;
+        } catch (e) {
+          detectionRef.current = null;
+        }
+      }, 160); // ~6 fps detection to save CPU
+    };
+    let raf = 0;
+    const drawLoop = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) {
+        raf = requestAnimationFrame(drawLoop);
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        raf = requestAnimationFrame(drawLoop);
+        return;
+      }
+
+      // match canvas size to video display size
+      const w = video.videoWidth || video.clientWidth || 640;
+      const h = video.videoHeight || video.clientHeight || 800;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      // draw mirrored video
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+      try { ctx.drawImage(video, 0, 0, w, h); } catch (e) {}
+      ctx.restore();
+
+      // draw product overlay using detection if available
+      try {
+        if (!productImgRef.current) {
+          const pi = new Image();
+          pi.crossOrigin = 'anonymous';
+          pi.src = product.image;
+          productImgRef.current = pi;
+        }
+
+        const img = productImgRef.current;
+        const det = detectionRef.current;
+
+        // tuning presets per product type — load from JSON so it's easy to tune
+        const presets: Record<string, { wMul: number; yOffsetMul: number; yAdjust: number }> = runtimePresets as any;
+        const preset = (runtimePresets as any)[product.vtoType] ?? (runtimePresets as any).default;
+
+        if (det && det.detection && img && img.complete) {
+          const box = det.detection.box;
+          // mirror X because canvas is mirrored
+          const centerX = w - (box.x + box.width / 2);
+          const topY = box.y;
+          let overlayW = box.width * preset.wMul;
+          let overlayH = (img.height / img.width) * overlayW;
+          let y = topY + box.height * preset.yOffsetMul + overlayH * preset.yAdjust * h;
+          const x = centerX - overlayW / 2;
+          ctx.save();
+          ctx.globalAlpha = 0.95;
+          ctx.drawImage(img, x, y, overlayW, overlayH);
+          ctx.restore();
+        } else if (img && img.complete) {
+          // fallback: draw centered small overlay
+          const overlayW = w * 0.4;
+          const overlayH = (img.height / img.width) * overlayW;
+          ctx.save(); ctx.globalAlpha = 0.9;
+          ctx.drawImage(img, w / 2 - overlayW / 2, h * 0.25 - overlayH / 2, overlayW, overlayH);
+          ctx.restore();
+        }
+      } catch (e) {}
+
+      raf = requestAnimationFrame(drawLoop);
+    };
+
+    if (cameraState === 'active') {
+      raf = requestAnimationFrame(drawLoop);
+      // start detection once models loaded (poll a bit)
+      const startPoll = setInterval(() => {
+        if (modelsLoadedRef.current) {
+          startDetection();
+          clearInterval(startPoll);
+        }
+      }, 200);
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (detectInterval) clearInterval(detectInterval);
+      detectionRef.current = null;
+    };
+  }, [cameraState, product.image, product.vtoType]);
 
   // Poll video/stream state for on-screen debug panel
   useEffect(() => {
@@ -356,7 +516,8 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
 
         const form = new FormData();
         form.append('person', blob, 'person.png');
-        form.append('product_url', product.image);
+        // mark capture as mirrored so backend can flip it back for alignment
+        form.append('product_url', product.image + '::mirrored');
 
         // Indicate process is happening
         showToast('🧬 Processing Try-On...');
@@ -499,6 +660,15 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
               />
             )}
 
+            {/* Canvas renderer: mirrored video frames + product overlay */}
+            {cameraState === 'active' && !vtoResultUrl && (
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                style={{ imageRendering: 'auto' }}
+              />
+            )}
+
             {/* Result image from backend */}
             {vtoResultUrl && (
               <img src={vtoResultUrl} alt="tryon-result" className="absolute inset-0 w-full h-full object-cover" />
@@ -627,6 +797,59 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
                 selectedId={selectedVariant.id}
                 onSelect={setSelectedVariant}
               />
+            </div>
+
+            {/* Overlay Adjuster (live presets tweak) */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold">Overlay Preset</div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setAdjustOpen(v => !v)} className="px-2 py-1 text-xs rounded bg-gray-100">{adjustOpen ? 'Close' : 'Adjust'}</button>
+                  <button onClick={() => {
+                    // reset runtime presets to defaults
+                    setRuntimePresets(overlayPresets as any);
+                    try { localStorage.removeItem('vto_overlay_presets'); } catch {}
+                    showToast('Reset presets to defaults');
+                  }} className="px-2 py-1 text-xs rounded bg-gray-100">Reset</button>
+                </div>
+              </div>
+
+              {adjustOpen && (
+                <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+                  {['wMul','yOffsetMul','yAdjust'].map((key) => {
+                    const preset = (runtimePresets as any)[product.vtoType] ?? (runtimePresets as any).default;
+                    const value = preset ? preset[key] : 0;
+                    const min = key === 'wMul' ? 0.2 : (key === 'yAdjust' ? -1 : -2);
+                    const max = key === 'wMul' ? 3 : (key === 'yAdjust' ? 1 : 2);
+                    const step = key === 'wMul' ? 0.01 : 0.01;
+                    return (
+                      <div key={key} className="mb-2">
+                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <div>{key}</div>
+                          <div className="font-mono">{Number(value).toFixed(2)}</div>
+                        </div>
+                        <input
+                          type="range"
+                          min={min}
+                          max={max}
+                          step={step}
+                          value={value}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setRuntimePresets(prev => {
+                              const next = { ...prev } as any;
+                              next[product.vtoType] = { ...(next[product.vtoType] ?? next.default), [key]: v };
+                              try { localStorage.setItem('vto_overlay_presets', JSON.stringify(next)); } catch {}
+                              return next;
+                            });
+                          }}
+                          className="w-full"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Action Buttons Row */}
