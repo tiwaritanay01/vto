@@ -1,4 +1,4 @@
-export type VTOType = 'makeup' | 'shoes' | 'earbuds' | 'glasses' | 'hat';
+export type VTOType = 'makeup' | 'shoes' | 'earbuds' | 'glasses' | 'hat' | 'tshirt';
 export type TrackingState = 'searching' | 'move-closer' | 'detected' | 'poor-lighting';
 export type CameraState = 'loading' | 'permission' | 'active' | 'denied' | 'simulated';
 
@@ -54,5 +54,13 @@ export const VTO_VARIANTS: Record<VTOType, VTOVariant[]> = {
     { id: 'red', label: 'Red', color: '#CC0000' },
     { id: 'olive', label: 'Olive', color: '#6B7C3C' },
     { id: 'grey', label: 'Heather Grey', color: '#8A8A8A' },
+  ],
+  tshirt: [
+    { id: 'white', label: 'White', color: '#FFFFFF', secondaryColor: '#F3F4F6' },
+    { id: 'black', label: 'Black', color: '#111827', secondaryColor: '#374151' },
+    { id: 'navy', label: 'Navy', color: '#0B3D91', secondaryColor: '#164A8A' },
+    { id: 'red', label: 'Red', color: '#C62828', secondaryColor: '#E53935' },
+    { id: 'green', label: 'Forest', color: '#2E7D32', secondaryColor: '#4CAF50' },
+    { id: 'grey', label: 'Heather Grey', color: '#9CA3AF', secondaryColor: '#D1D5DB' },
   ],
 };

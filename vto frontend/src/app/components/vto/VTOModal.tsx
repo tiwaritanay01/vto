@@ -121,6 +121,11 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [cameraInitKey, setCameraInitKey] = useState(0);
+  const [permissionState, setPermissionState] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<{ readyState: number; width: number; height: number; tracks: number; hasStream: boolean }>({ readyState: 0, width: 0, height: 0, tracks: 0, hasStream: false });
 
   // Show toast helper
   const showToast = useCallback((msg: string) => {
@@ -147,13 +152,34 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       setLoadingCountdown(prev => Math.max(0, prev - 1));
     }, 1000);
 
+    const queryPermission = async () => {
+      try {
+        // permissions API may not support 'camera' in all browsers
+        // fall back to 'prompt' if unsupported
+        // @ts-ignore
+        if (navigator.permissions && (navigator.permissions as any).query) {
+          // @ts-ignore
+          const p = await (navigator.permissions as any).query({ name: 'camera' });
+          setPermissionState(p.state);
+          console.debug('[VTO] permission state:', p.state);
+        } else {
+          setPermissionState(null);
+        }
+      } catch (e) {
+        setPermissionState(null);
+      }
+    };
+
     const init = async () => {
+      await queryPermission();
       if (!navigator.mediaDevices?.getUserMedia) {
         clearTimeout(safetyTimer);
         if (!cancelled) setCameraState('simulated');
         return;
       }
       try {
+        console.debug('[VTO] requesting getUserMedia()');
+        setLastError(null);
         stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: 'user', 
@@ -170,22 +196,54 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
 
         if (videoRef.current) {
           const video = videoRef.current;
+          // set DOM properties explicitly to improve autoplay reliability
+          video.muted = true;
+          video.autoplay = true;
+          // playsInline needs to be set as a property for some mobile browsers
+          // and React's playsInline attribute is already present on the element.
+          // Setting it here ensures the property is present on the DOM node.
+          (video as any).playsInline = true;
+
           video.srcObject = stream;
 
           const tryPlay = async () => {
+            // Add a timeout guard: if play() doesn't resolve, fall back to simulated mode
+            let timedOut = false;
+            const timeout = setTimeout(() => {
+              timedOut = true;
+              console.warn('video.play() timed out — falling back to simulated mode');
+              if (!cancelled) setCameraState('simulated');
+              setLastError('video.play() timed out');
+            }, 4000);
+
             try {
-              await video.play();
-              if (!cancelled) setCameraState('active');
+              console.debug('[VTO] attempting video.play()');
+              const p = video.play();
+              if (p instanceof Promise) await p;
+              clearTimeout(timeout);
+              if (!timedOut && !cancelled) {
+                setCameraState('active');
+                console.debug('[VTO] video.play() succeeded');
+              }
             } catch (e) {
+              clearTimeout(timeout);
               console.warn('Video play failed:', e);
               if (!cancelled) setCameraState('simulated');
+              setLastError(String(e));
             }
           };
 
           if (video.readyState >= 2) {
             tryPlay();
           } else {
-            video.oncanplay = () => { if (!cancelled) tryPlay(); };
+            // Use both canplay and loadedmetadata to be more robust across browsers
+            const onReady = () => {
+              if (!cancelled) tryPlay();
+              video.removeEventListener('canplay', onReady);
+              video.removeEventListener('loadedmetadata', onReady);
+            };
+            video.addEventListener('canplay', onReady);
+            video.addEventListener('loadedmetadata', onReady);
           }
         }
         streamRef.current = stream;
@@ -193,11 +251,14 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         clearTimeout(safetyTimer);
         console.error('Camera access error:', err);
         if (!cancelled) {
+          // update permission state for debugging
+          try { if (err?.name === 'NotAllowedError') setPermissionState('denied'); } catch {}
           if (err?.name === 'NotReadableError') {
             showToast('🚨 Camera in use by another app. Close other apps & retry.');
           } else if (err?.name === 'NotAllowedError') {
             showToast('🚫 Camera permission denied. Enable in browser settings.');
           }
+          setLastError(String(err));
           setCameraState('denied');
         }
       }
@@ -210,6 +271,22 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       clearInterval(countdownInterval);
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
+  }, [cameraInitKey]);
+
+  // Poll video/stream state for on-screen debug panel
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const v = videoRef.current;
+      const s = streamRef.current;
+      setDebugInfo({
+        readyState: v?.readyState ?? 0,
+        width: v?.videoWidth ?? 0,
+        height: v?.videoHeight ?? 0,
+        tracks: s ? s.getTracks().length : 0,
+        hasStream: !!s,
+      });
+    }, 500);
+    return () => clearInterval(iv);
   }, []);
 
   // Tracking state sequence
@@ -499,6 +576,19 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
                 }}
               />
             )}
+
+            {/* On-screen debug panel (toggleable) */}
+            {debugOpen && (
+              <div className="absolute top-4 right-4 z-40 p-2 text-xs bg-black/60 text-white rounded" style={{ minWidth: 200 }}>
+                <div><strong>permission:</strong> {permissionState ?? 'unknown'}</div>
+                <div><strong>cameraState:</strong> {cameraState}</div>
+                <div><strong>readyState:</strong> {debugInfo.readyState}</div>
+                <div><strong>video:</strong> {debugInfo.width}x{debugInfo.height}</div>
+                <div><strong>tracks:</strong> {debugInfo.tracks}</div>
+                <div><strong>hasStream:</strong> {String(debugInfo.hasStream)}</div>
+                <div style={{ marginTop: 6 }}><strong>lastError:</strong> {lastError ?? 'none'}</div>
+              </div>
+            )}
           </div>
 
           {/* ═══ BOTTOM PANEL ═══ */}
@@ -563,6 +653,27 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
 
               {/* Capture Button (main) */}
               <CaptureButton onCapture={handleCapture} disabled={!cameraReady} />
+
+                  {/* Debug / Retry (dev usage) */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        // trigger re-init of camera
+                        setCameraInitKey(k => k + 1);
+                        setCameraState('loading');
+                        showToast('🔁 Re-initializing camera...');
+                      }}
+                      className="px-3 py-2 rounded-lg bg-gray-100 text-xs"
+                    >
+                      Retry Camera
+                    </button>
+                    <button
+                      onClick={() => setDebugOpen(d => !d)}
+                      className="px-3 py-2 rounded-lg bg-gray-100 text-xs"
+                    >
+                      {debugOpen ? 'Hide Debug' : 'Show Debug'}
+                    </button>
+                  </div>
 
               {/* Add to Cart */}
               <button

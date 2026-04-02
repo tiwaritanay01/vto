@@ -126,6 +126,25 @@ function ShoesOverlay({ color, secondaryColor }: { color: string; secondaryColor
   );
 }
 
+function TShirtOverlay({ color, secondaryColor }: { color: string; secondaryColor?: string }) {
+  const accent = secondaryColor || '#FFFFFF';
+  return (
+    <svg width="260" height="260" viewBox="0 0 260 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Shirt body */}
+      <path d="M40 70 L220 70 L200 200 L60 200 Z" fill={color} fillOpacity="0.95" />
+      {/* Sleeves */}
+      <path d="M40 70 L10 110 L40 120" fill={color} fillOpacity="0.95" />
+      <path d="M220 70 L250 110 L220 120" fill={color} fillOpacity="0.95" />
+      {/* Collar */}
+      <path d="M100 70 Q130 40 160 70" fill={accent} fillOpacity="0.12" />
+      {/* Chest shine */}
+      <ellipse cx="130" cy="120" rx="48" ry="18" fill="white" fillOpacity="0.06" />
+      {/* Subtle seam */}
+      <path d="M80 140 Q130 155 180 140" stroke="rgba(255,255,255,0.06)" strokeWidth="2" fill="none" />
+    </svg>
+  );
+}
+
 export function AlignmentOverlay({ vtoType, selectedVariant, showOverlay, trackingActive }: AlignmentOverlayProps) {
   const color = selectedVariant?.color || '#FF9900';
   const secondaryColor = selectedVariant?.secondaryColor;
@@ -197,6 +216,11 @@ export function AlignmentOverlay({ vtoType, selectedVariant, showOverlay, tracki
             {vtoType === 'hat' && (
               <div className="absolute" style={{ top: -45, left: '50%', transform: 'translateX(-55%)' }}>
                 <HatOverlay color={color} />
+              </div>
+            )}
+            {vtoType === 'tshirt' && (
+              <div className="absolute" style={{ top: '44%', left: '50%', transform: 'translate(-50%, -10%)', width: 260 }}>
+                <TShirtOverlay color={color} secondaryColor={secondaryColor} />
               </div>
             )}
           </>
