@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "cd \"vto frontend\" && npm install && npm run build",
+  "buildCommand": "cd \"vto frontend\" && npm run build",
   "outputDirectory": "vto frontend/dist",
-  "installCommand": "cd \"vto frontend\" && npm install",
+  "installCommand": "cd \"vto frontend\" && npm install --no-audit --no-fund",
   "framework": null,
   "rewrites": [
     {
