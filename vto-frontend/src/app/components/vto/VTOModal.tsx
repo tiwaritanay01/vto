@@ -730,7 +730,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
             )}
 
             {/* Canvas renderer: mirrored video frames + product overlay */}
-            {cameraState === 'active' && !vtoResultUrl && (
+            {(cameraState === 'active' || cameraState === 'simulated' || cameraState === 'denied') && !vtoResultUrl && (
               <canvas
                 ref={canvasRef}
                 className="absolute inset-0 w-full h-full pointer-events-none"
