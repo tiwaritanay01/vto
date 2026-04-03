@@ -164,7 +164,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
 
     // Countdown for UI feedback
     const countdownInterval = setInterval(() => {
-      setLoadingCountdown(prev => Math.max(0, prev - 1));
+      setLoadingCountdown((prev: number) => Math.max(0, prev - 1));
     }, 1000);
 
     const queryPermission = async () => {
@@ -199,7 +199,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       try {
         // If an existing stream is present, stop it before requesting a new one
         if (streamRef.current) {
-          try { streamRef.current.getTracks().forEach(t => t.stop()); } catch {}
+          try { streamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
           streamRef.current = null;
           if (videoRef.current) videoRef.current.srcObject = null;
         }
@@ -297,8 +297,8 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       clearTimeout(safetyTimer);
       clearInterval(countdownInterval);
       // stop both the local stream and any stream on the shared ref
-      try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch {}
-      try { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); } catch {}
+      try { if (stream) stream.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
+      try { if (streamRef.current) streamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop()); } catch {}
       streamRef.current = null;
       if (videoRef.current) videoRef.current.srcObject = null;
     };
@@ -548,7 +548,8 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         showToast('🧬 Processing Try-On...');
 
         // Check for custom API URL in environment or use relative proxy path
-        const VTO_API = (import.meta as any).env?.VITE_VTO_API_URL || '/api/vto/tryon';
+        // Final Bridge: Use the live Railway API URL
+        const VTO_API = "https://celebrated-cat-production-204b.up.railway.app/api/vto/tryon";
         const res = await fetch(VTO_API, {
           method: 'POST',
           body: form,
@@ -668,7 +669,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setCameraInitKey(k => k + 1);
+                  setCameraInitKey((k: number) => k + 1);
                   setCameraState('loading');
                   showToast('🔁 Re-initializing camera...');
                 }}
