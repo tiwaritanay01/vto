@@ -1,5 +1,4 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "buildCommand": "cd \"vto frontend\" && npm install && npm run build",
   "outputDirectory": "vto frontend/dist",
@@ -8,25 +7,13 @@
   "rewrites": [
     {
       "source": "/api/vto/tryon",
-      "destination": "/api/vto/tryon"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" }
-      ]
+      "destination": "/api/vto/tryon.py"
     }
   ],
   "functions": {
     "api/vto/tryon.py": {
       "runtime": "@vercel/python@4.5.0",
-      "maxDuration": 30,
-      "memory": 1024
+      "maxDuration": 60
     }
   }
 }
