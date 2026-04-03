@@ -7,7 +7,7 @@ import { AlignmentOverlay } from "./AlignmentOverlay";
 import { VariantCarousel } from "./VariantCarousel";
 import { CaptureButton } from "./CaptureButton";
 
-interface VTOProduct {
+export interface VTOProduct {
   id: number;
   name: string;
   brand: string;
@@ -522,7 +522,9 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         // Indicate process is happening
         showToast('🧬 Processing Try-On...');
 
-        const res = await fetch('http://localhost:8000/api/vto/tryon', {
+        // Check for custom API URL in environment or use relative proxy path
+        const VTO_API = (import.meta as any).env?.VITE_VTO_API_URL || '/api/vto/tryon';
+        const res = await fetch(VTO_API, {
           method: 'POST',
           body: form,
         });
@@ -637,13 +639,37 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
               </span>
             </div>
 
-            {/* Help */}
-            <button
-              onClick={() => setHelpOpen(!helpOpen)}
-              className="w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-all"
-            >
-              <HelpCircle size={18} className="text-white" />
-            </button>
+            {/* Util Group */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setCameraInitKey(k => k + 1);
+                  setCameraState('loading');
+                  showToast('🔁 Re-initializing camera...');
+                }}
+                className="w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-all"
+                title="Retry Camera"
+              >
+                <RotateCcw size={16} className="text-white" />
+              </button>
+
+              <button
+                onClick={() => setDebugOpen(!debugOpen)}
+                className="w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-all"
+                title="Toggle Debug Info"
+                style={{ border: debugOpen ? '1px solid #FF9900' : 'none' }}
+              >
+                <Layers size={16} className="text-white" />
+              </button>
+
+              <button
+                onClick={() => setHelpOpen(!helpOpen)}
+                className="w-9 h-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-all"
+                title="Help Guide"
+              >
+                <HelpCircle size={18} className="text-white" />
+              </button>
+            </div>
           </div>
 
           {/* ═══ CAMERA VIEW ═══ */}
@@ -877,28 +903,7 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
               {/* Capture Button (main) */}
               <CaptureButton onCapture={handleCapture} disabled={!cameraReady} />
 
-                  {/* Debug / Retry (dev usage) */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      onClick={() => {
-                        // trigger re-init of camera
-                        setCameraInitKey(k => k + 1);
-                        setCameraState('loading');
-                        showToast('🔁 Re-initializing camera...');
-                      }}
-                      className="px-3 py-2 rounded-lg bg-gray-100 text-xs"
-                    >
-                      Retry Camera
-                    </button>
-                    <button
-                      onClick={() => setDebugOpen(d => !d)}
-                      className="px-3 py-2 rounded-lg bg-gray-100 text-xs"
-                    >
-                      {debugOpen ? 'Hide Debug' : 'Show Debug'}
-                    </button>
-                  </div>
-
-              {/* Add to Cart */}
+                  {/* Add to Cart */}
               <button
                 onClick={handleAddToCart}
                 className="flex flex-col items-center gap-0.5 transition-all"
@@ -1023,4 +1028,4 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
   );
 }
 
-export type { VTOProduct };
+// End of VTOModal component
