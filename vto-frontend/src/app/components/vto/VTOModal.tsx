@@ -364,7 +364,6 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         return;
       }
 
-      // match canvas size to display size
       const w = video?.videoWidth || 640;
       const h = video?.videoHeight || 800;
       if (canvas.width !== w || canvas.height !== h) {
@@ -372,14 +371,8 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         canvas.height = h;
       }
 
-      // draw mirrored video
       ctx.save();
       ctx.clearRect(0, 0, w, h);
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-      if (video) {
-        try { ctx.drawImage(video, 0, 0, w, h); } catch (e) {}
-      }
       ctx.restore();
 
       // draw product overlay using detection if available
