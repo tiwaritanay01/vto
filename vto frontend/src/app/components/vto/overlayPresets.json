@@ -1,7 +1,0 @@
-{
-  "earbuds": { "wMul": 0.55, "yOffsetMul": 0.35, "yAdjust": 0 },
-  "hat": { "wMul": 1.6, "yOffsetMul": -0.9, "yAdjust": -0.12 },
-  "tshirt": { "wMul": 1.8, "yOffsetMul": 0.6, "yAdjust": 0.1 },
-  "glasses": { "wMul": 1.15, "yOffsetMul": 0.28, "yAdjust": 0 },
-  "default": { "wMul": 1.5, "yOffsetMul": -0.45, "yAdjust": 0 }
-}
