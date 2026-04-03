@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/vto/tryon",
-      "destination": "/api/vto/tryon.py"
+      "destination": "api/vto/tryon.py"
     }
   ],
   "functions": {
