@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python311", "nodejs"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt", "cd vto-frontend && npm install"]
+
+[phases.build]
+cmds = ["cd vto-frontend && npm run build"]
+
+[start]
+cmd = "uvicorn api.vto.main:app --host 0.0.0.0 --port ${PORT:-8080}"
