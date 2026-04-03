@@ -327,11 +327,11 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
     let detectInterval: ReturnType<typeof setInterval> | null = null;
     const startDetection = () => {
       const video = videoRef.current;
-      if (!video || !modelsLoadedRef.current) return;
+      if (!video || !modelsLoadedRef.current || cameraState !== 'active') return;
       // tuned TinyFaceDetector options for speed/accuracy tradeoff
       const detectorOptions = new faceapiRef.current.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 });
       detectInterval = setInterval(async () => {
-        if (!video || video.readyState < 2) return;
+        if (!video || video.readyState < 2 || cameraState !== 'active') return;
         try {
           const det = await faceapiRef.current
             .detectSingleFace(video, detectorOptions)
@@ -346,7 +346,14 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
     const drawLoop = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas) {
+      
+      // In simulated mode, we don't need the video element to be active
+      if (cameraState !== 'active' && cameraState !== 'simulated' && cameraState !== 'denied') {
+        raf = requestAnimationFrame(drawLoop);
+        return;
+      }
+
+      if (!canvas) {
         raf = requestAnimationFrame(drawLoop);
         return;
       }
@@ -357,9 +364,9 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         return;
       }
 
-      // match canvas size to video display size
-      const w = video.videoWidth || video.clientWidth || 640;
-      const h = video.videoHeight || video.clientHeight || 800;
+      // match canvas size to display size
+      const w = video?.videoWidth || 640;
+      const h = video?.videoHeight || 800;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -370,7 +377,9 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       ctx.clearRect(0, 0, w, h);
       ctx.translate(w, 0);
       ctx.scale(-1, 1);
-      try { ctx.drawImage(video, 0, 0, w, h); } catch (e) {}
+      if (video) {
+        try { ctx.drawImage(video, 0, 0, w, h); } catch (e) {}
+      }
       ctx.restore();
 
       // draw product overlay using detection if available
@@ -402,12 +411,19 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
           ctx.globalAlpha = 0.95;
           ctx.drawImage(img, x, y, overlayW, overlayH);
           ctx.restore();
-        } else if (img && img.complete) {
-          // fallback: draw centered small overlay
-          const overlayW = w * 0.4;
-          const overlayH = (img.height / img.width) * overlayW;
-          ctx.save(); ctx.globalAlpha = 0.9;
-          ctx.drawImage(img, w / 2 - overlayW / 2, h * 0.25 - overlayH / 2, overlayW, overlayH);
+        } else if (img && img.complete && (cameraState === 'simulated' || cameraState === 'denied')) {
+          // Optimized placement for silhouette in simulated mode
+          const overlayW = w * 0.45;
+          const aspectRatio = img.height / img.width;
+          const overlayH = overlayW * aspectRatio;
+          
+          // Position relative to the silhouette head
+          const centerX = w / 2;
+          const centerY = h * 0.38; 
+          
+          ctx.save();
+          ctx.globalAlpha = 0.95;
+          ctx.drawImage(img, centerX - overlayW / 2, centerY - overlayH / 2, overlayW, overlayH);
           ctx.restore();
         }
       } catch (e) {}
@@ -415,15 +431,16 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
       raf = requestAnimationFrame(drawLoop);
     };
 
-    if (cameraState === 'active') {
+    if (cameraState === 'active' || cameraState === 'simulated' || cameraState === 'denied') {
       raf = requestAnimationFrame(drawLoop);
-      // start detection once models loaded (poll a bit)
-      const startPoll = setInterval(() => {
-        if (modelsLoadedRef.current) {
-          startDetection();
-          clearInterval(startPoll);
-        }
-      }, 200);
+      if (cameraState === 'active') {
+        const startPoll = setInterval(() => {
+          if (modelsLoadedRef.current) {
+            startDetection();
+            clearInterval(startPoll);
+          }
+        }, 200);
+      }
     }
 
     return () => {
