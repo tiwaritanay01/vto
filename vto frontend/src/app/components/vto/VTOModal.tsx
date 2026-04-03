@@ -519,6 +519,31 @@ export function VTOModal({ product, onClose, onAddToCart }: VTOModalProps) {
         // mark capture as mirrored so backend can flip it back for alignment
         form.append('product_url', product.image + '::mirrored');
 
+        // Extract tracking data for the lightweight backend (Pillow-only)
+        try {
+          const det = detectionRef.current;
+          if (det && det.detection) {
+            const box = det.detection.box;
+            // Calculations match the visual overlay to ensure high-precision results on backend
+            const preset = (runtimePresets as any)[product.vtoType] ?? (runtimePresets as any).default;
+            const centerX = w - (box.x + box.width / 2);
+            const overlayW = box.width * (preset?.wMul ?? 1.2);
+            const x = centerX - overlayW / 2;
+            const aspectRatio = (productImgRef.current?.height || 1) / (productImgRef.current?.width || 1);
+            const overlayH = overlayW * aspectRatio;
+            const topY = box.y;
+            const y = topY + box.height * (preset?.yOffsetMul ?? 0.1) + overlayH * (preset?.yAdjust ?? 0) * h;
+
+            form.append('alignment', JSON.stringify({
+              x: Math.round(x),
+              y: Math.round(y),
+              w: Math.round(overlayW)
+            }));
+          }
+        } catch (e) {
+          console.debug('[VTO] Failed to send alignment, fallback to backend logic');
+        }
+
         // Indicate process is happening
         showToast('🧬 Processing Try-On...');
 
