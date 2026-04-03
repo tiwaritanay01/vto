@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "postinstall": "node ./scripts/fetch-faceapi-models.cjs"
+    "build": "vite build"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
